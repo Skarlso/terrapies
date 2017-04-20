@@ -28,19 +28,53 @@ func main() {
 		}
 		return false
 	}
-	// grab all articles and print them
+
 	idMatches := scrape.FindAll(root, idMatcher)
 	var ids []string
 	for _, id := range idMatches {
 		ids = append(ids, scrape.Attr(id, "id"))
 	}
 	fmt.Println("Gathered ids: ", ids)
-	var wg sync.WaitGroup
+	done := make(chan bool)
+	defer close(done)
+
+	workers := make([]<-chan string, 0)
+
 	for _, id := range ids {
-		wg.Add(1)
-		go gatherForURL("http://terraria.gamepedia.com/"+id, &wg)
+		workers = append(workers, gatherForURL("http://terraria.gamepedia.com/"+id, done))
 	}
-	wg.Wait()
+
+	for rec := range merge(done, workers...) {
+		fmt.Println(rec)
+	}
+}
+
+func merge(done <-chan bool, cs ...<-chan string) <-chan string {
+	var wg sync.WaitGroup
+	out := make(chan string)
+
+	output := func(c <-chan string) {
+		defer wg.Done()
+		for n := range c {
+			select {
+			case out <- n:
+			case <-done:
+				return
+			}
+		}
+	}
+	wg.Add(len(cs))
+	for _, c := range cs {
+		go output(c)
+	}
+
+	// Start a goroutine to close out once all the output goroutines are
+	// done.  This must start after the wg.Add call.
+	go func() {
+		wg.Wait()
+		close(out)
+	}()
+	return out
 }
 
 func gatherForURL(url string, done <-chan bool) <-chan string {
@@ -70,9 +104,12 @@ func gatherForURL(url string, done <-chan bool) <-chan string {
 		}
 		craftingMatches := scrape.FindAll(root, craft)
 		for _, craftList := range craftingMatches {
-			out <- craftList.Data
+			select {
+			case out <- craftList.Data:
+			case <-done:
+				return
+			}
 		}
 	}()
-
 	return out
 }
