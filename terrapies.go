@@ -43,34 +43,36 @@ func main() {
 	wg.Wait()
 }
 
-func gatherForURL(url string, wg *sync.WaitGroup) {
+func gatherForURL(url string, done <-chan bool) <-chan string {
+	out := make(chan string, 1)
 	// request and parse the front page
-	fmt.Printf("Going to URL: %s\n", url)
-	resp, err := http.Get(url)
-	if err != nil {
-		fmt.Println("Error processing: ", url)
-		wg.Done()
-		return
-	}
-	root, err := html.Parse(resp.Body)
-	if err != nil {
-		fmt.Println("Error body: ", err)
-		wg.Done()
-		return
-	}
-
-	// Get TOC
-	// Get each section and gather all the recipes one-by-one by visiting each section from TOC
-	craft := func(n *html.Node) bool {
-		if n != nil {
-			return scrape.Attr(n, "class") == "terraria outer"
+	go func() {
+		defer close(out)
+		fmt.Printf("Going to URL: %s\n", url)
+		resp, err := http.Get(url)
+		if err != nil {
+			fmt.Println("Error processing: ", url)
+			return
 		}
-		return false
-	}
-	craftingMatches := scrape.FindAll(root, craft)
-	for _, craftList := range craftingMatches {
-		fmt.Println("Craftlist for URL: ", url)
-		fmt.Println(craftList)
-	}
-	wg.Done()
+		root, err := html.Parse(resp.Body)
+		if err != nil {
+			fmt.Println("Error body: ", err)
+			return
+		}
+
+		// Get TOC
+		// Get each section and gather all the recipes one-by-one by visiting each section from TOC
+		craft := func(n *html.Node) bool {
+			if n != nil {
+				return scrape.Attr(n, "class") == "terraria outer"
+			}
+			return false
+		}
+		craftingMatches := scrape.FindAll(root, craft)
+		for _, craftList := range craftingMatches {
+			out <- craftList.Data
+		}
+	}()
+
+	return out
 }
