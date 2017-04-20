@@ -68,8 +68,6 @@ func merge(done <-chan bool, cs ...<-chan string) <-chan string {
 		go output(c)
 	}
 
-	// Start a goroutine to close out once all the output goroutines are
-	// done.  This must start after the wg.Add call.
 	go func() {
 		wg.Wait()
 		close(out)
@@ -105,7 +103,7 @@ func gatherForURL(url string, done <-chan bool) <-chan string {
 		craftingMatches := scrape.FindAll(root, craft)
 		for _, craftList := range craftingMatches {
 			select {
-			case out <- craftList.Data:
+			case out <- scrape.Attr(craftList, "class"):
 			case <-done:
 				return
 			}
