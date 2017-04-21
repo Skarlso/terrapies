@@ -9,6 +9,16 @@ import (
 	"golang.org/x/net/html"
 )
 
+type recipe struct {
+	item        string
+	ingredients []string
+}
+
+type craftingPlace struct {
+	id      string
+	recipes []recipe
+}
+
 func main() {
 	// request and parse the front page
 	resp, err := http.Get("http://terraria.gamepedia.com/Recipes")
@@ -102,8 +112,9 @@ func gatherForURL(url string, done <-chan bool) <-chan string {
 		}
 		craftingMatches := scrape.FindAll(root, craft)
 		for _, craftList := range craftingMatches {
+			innerTable := scrape.FindAllNested(craftList, scrape.ByClass("inner"))
 			select {
-			case out <- scrape.Attr(craftList, "class"):
+			case out <- innerTable[0].FirstChild.DataAtom.String():
 			case <-done:
 				return
 			}
