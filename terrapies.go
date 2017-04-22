@@ -112,11 +112,15 @@ func gatherForURL(url string, done <-chan bool) <-chan string {
 		}
 		craftingMatches := scrape.FindAll(root, craft)
 		for _, craftList := range craftingMatches {
-			innerTable := scrape.FindAllNested(craftList, scrape.ByClass("inner"))
-			select {
-			case out <- innerTable[0].FirstChild.DataAtom.String():
-			case <-done:
-				return
+			innerTable := scrape.FindAllNested(craftList, scrape.ByClass("mw-redirect"))
+			if len(innerTable) > 0 {
+				for _, link := range innerTable {
+					select {
+					case out <- scrape.Attr(link, "title"):
+					case <-done:
+						return
+					}
+				}
 			}
 		}
 	}()
